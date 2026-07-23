@@ -1,10 +1,10 @@
-const { onDocumentWritten } = require('firebase-functions/v2/firestore');
-const { getAuth } = require('firebase-admin/auth');
-const logger = require('firebase-functions/logger');
+const {onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {getAuth} = require("firebase-admin/auth");
+const logger = require("firebase-functions/logger");
 
-const VALID_ROLES = ['super_admin', 'hospital_admin', 'receptionist', 'doctor', 'patient'];
+const VALID_ROLES = ["super_admin", "hospital_admin", "receptionist", "doctor", "patient"];
 
-exports.onUserDocWritten = onDocumentWritten('users/{userId}', async (event) => {
+exports.onUserDocWritten = onDocumentWritten("users/{userId}", async (event) => {
   const userId = event.params.userId;
   const data = event.data?.after?.data();
 
@@ -13,7 +13,7 @@ exports.onUserDocWritten = onDocumentWritten('users/{userId}', async (event) => 
     return;
   }
 
-  const { role, hospitalId } = data;
+  const {role, hospitalId} = data;
 
   if (!VALID_ROLES.includes(role)) {
     logger.error(`onUserDocWritten: invalid role "${role}" on users/${userId}, skipping`);
