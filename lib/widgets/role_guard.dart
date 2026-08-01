@@ -7,9 +7,9 @@ import '../viewmodels/auth/auth_viewmodel.dart';
 /// Widget-level defense in depth. The router's redirect logic is the
 /// primary gate (it decides which screen you land on), but this catches
 /// the gap case where a role changes *while a guarded screen is already
-/// mounted* — e.g. you edit role in the Firestore console mid-session — and
+/// mounted* — e.g. you edit role in the Supabase dashboard mid-session — and
 /// the redirect hasn't fired yet because no navigation event triggered it.
-/// Firestore rules remain the actual security boundary regardless; this is
+/// RLS policies remain the actual security boundary regardless; this is
 /// UX, not access control.
 class RoleGuard extends ConsumerWidget {
   const RoleGuard({

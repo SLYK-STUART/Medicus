@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 enum AppRole {
   superAdmin,
   hospitalAdmin,
@@ -24,7 +22,7 @@ enum AppRole {
     }
   }
 
-  String toFirestoreString() {
+  String toDbString() {
     switch (this) {
       case AppRole.superAdmin:
         return 'super_admin';
@@ -42,7 +40,7 @@ enum AppRole {
 
 class UserModel {
   final String uid;
-  final String email;
+  final String? email; // null for walk-in patients created without one
   final String? displayName;
   final String? phoneNumber;
   final AppRole role;
@@ -51,7 +49,7 @@ class UserModel {
 
   const UserModel({
     required this.uid,
-    required this.email,
+    this.email,
     this.displayName,
     this.phoneNumber,
     required this.role,
@@ -59,31 +57,29 @@ class UserModel {
     this.createdAt,
   });
 
-  factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    if (data == null) {
-      throw StateError('UserModel.fromFirestore: doc ${doc.id} has no data');
-    }
+  factory UserModel.fromSupabase(Map<String, dynamic> data) {
     return UserModel(
-      uid: doc.id,
-      email: data['email'] as String,
-      displayName: data['displayName'] as String?,
-      phoneNumber: data['phoneNumber'] as String?,
+      uid: data['id'] as String,
+      email: data['email'] as String?,
+      displayName: data['display_name'] as String?,
+      phoneNumber: data['phone_number'] as String?,
       role: AppRole.fromString(data['role'] as String),
-      hospitalId: data['hospitalId'] as String?,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      hospitalId: data['hospital_id'] as String?,
+      createdAt: data['created_at'] != null
+          ? DateTime.tryParse(data['created_at'] as String)
+          : null,
     );
   }
 
-  Map<String, dynamic> toMap() {
+  /// Insert payload for `public.profiles` (snake_case columns).
+  Map<String, dynamic> toProfileInsert() {
     return {
-      'uid': uid,
+      'id': uid,
       'email': email,
-      'displayName': displayName,
-      'phoneNumber': phoneNumber,
-      'role': role.toFirestoreString(),
-      'hospitalId': hospitalId,
-      'createdAt': FieldValue.serverTimestamp(),
+      'display_name': displayName,
+      'phone_number': phoneNumber,
+      'role': role.toDbString(),
+      'hospital_id': hospitalId,
     };
   }
 

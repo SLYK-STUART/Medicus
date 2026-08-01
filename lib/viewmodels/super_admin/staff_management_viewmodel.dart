@@ -15,6 +15,7 @@ class StaffCreateController extends AsyncNotifier<void> {
     String? displayName,
     String? hospitalId,
     String? departmentId,
+    String? roomNumber,
   }) async {
     state = const AsyncLoading();
     try {
@@ -25,6 +26,7 @@ class StaffCreateController extends AsyncNotifier<void> {
         displayName: displayName,
         hospitalId: hospitalId,
         departmentId: departmentId,
+        roomNumber: roomNumber,
       );
       state = const AsyncData(null);
       return true;

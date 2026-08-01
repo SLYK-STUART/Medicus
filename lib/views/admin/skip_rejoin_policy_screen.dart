@@ -48,11 +48,40 @@ class SkipPolicyScreen extends ConsumerWidget {
                   groupValue: hospital.skipPolicy,
                   onChanged: (v) => ref.read(_hospitalRepoProvider).updateSkipPolicy(hospitalId: hospitalId, skipPolicy: v!),
                 ),
+                const Divider(height: 40),
+                const Text(
+                  'When a doctor calls a patient who isn\'t present, how long should they be given to report before being skipped?',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                _GraceMinutesPicker(hospitalId: hospitalId, current: hospital.noShowGraceMinutes),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _GraceMinutesPicker extends ConsumerWidget {
+  const _GraceMinutesPicker({required this.hospitalId, required this.current});
+  final String hospitalId;
+  final int current;
+
+  static const _options = [2, 5, 10, 15];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Wrap(
+      spacing: 8,
+      children: _options.map((minutes) {
+        return ChoiceChip(
+          label: Text('$minutes min'),
+          selected: current == minutes,
+          onSelected: (_) => ref.read(_hospitalRepoProvider).updateNoShowGraceMinutes(hospitalId: hospitalId, minutes: minutes),
+        );
+      }).toList(),
     );
   }
 }

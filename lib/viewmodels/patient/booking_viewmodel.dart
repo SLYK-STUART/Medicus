@@ -4,7 +4,6 @@ import '../../repositories/appointment_repository.dart';
 import '../../repositories/department_repository.dart';
 import '../../repositories/doctor_repository.dart';
 import '../../repositories/hospital_repository.dart';
-import '../auth/auth_viewmodel.dart';
 
 final bookingHospitalRepoProvider = Provider((ref) => HospitalRepository());
 final bookingDepartmentRepoProvider = Provider((ref) => DepartmentRepository());
@@ -20,15 +19,16 @@ class BookingController extends AsyncNotifier<void> {
     required String hospitalId,
     required String departmentId,
     required String scheduledDate,
+    String? scheduledTimeSlot,
   }) async {
     state = const AsyncLoading();
     try {
-      await ref.read(authRepositoryProvider).ensureFreshToken();
       final result = await ref.read(appointmentRepositoryProvider).createAppointment(
         patientId: patientId,
         hospitalId: hospitalId,
         departmentId: departmentId,
         scheduledDate: scheduledDate,
+        scheduledTimeSlot: scheduledTimeSlot,
       );
       state = const AsyncData(null);
       return result;

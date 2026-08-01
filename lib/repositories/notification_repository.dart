@@ -1,27 +1,34 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/errors/failures.dart';
+import '../core/supabase/supabase_init.dart';
 import '../models/notification_model.dart';
 
 class NotificationRepository {
-  NotificationRepository({FirebaseFirestore? firestore}) : _firestore = firestore ?? FirebaseFirestore.instance;
-  final FirebaseFirestore _firestore;
+  NotificationRepository({SupabaseClient? client}) : _client = client ?? supabase;
 
-  /// No orderBy in the query itself — same lesson as watchPatientAppointments
-  /// earlier: equality filter + orderBy on a different field needs a
-  /// composite index, so sort client-side instead.
+  final SupabaseClient _client;
+
+  /// Live notifications for a user. Sorted client-side by created_at desc.
   Stream<List<NotificationModel>> watchMyNotifications(String userId) {
-    return _firestore
-        .collection('notifications')
-        .where('userId', isEqualTo: userId)
-        .snapshots()
-        .map((snap) {
-      final list = snap.docs.map(NotificationModel.fromFirestore).toList();
-      list.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+    return _client
+        .from('notifications')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .map((rows) {
+      final list = rows.map(NotificationModel.fromSupabase).toList();
+      list.sort(
+        (a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+      );
       return list;
     });
   }
 
-  Future<void> markAsRead(String notificationId) {
-    return _firestore.collection('notifications').doc(notificationId).update({'read': true});
+  Future<void> markAsRead(String notificationId) async {
+    try {
+      await _client.from('notifications').update({'read': true}).eq('id', notificationId);
+    } on PostgrestException catch (e) {
+      throw DataFailure(e.message, code: e.code);
+    }
   }
 }

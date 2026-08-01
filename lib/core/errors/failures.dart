@@ -1,6 +1,6 @@
 /// Base failure type for repository-layer errors, decoupled from
-/// Firebase-specific exception types so viewmodels/UI never depend
-/// directly on firebase_auth or cloud_firestore exception classes.
+/// provider-specific exception types so viewmodels/UI never depend
+/// directly on AuthException / PostgrestException classes.
 class Failure {
   final String message;
   final String? code;

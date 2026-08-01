@@ -1,10 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class DoctorModel {
   final String uid;
   final String displayName;
   final String hospitalId;
   final String departmentId;
+  final String? roomNumber;
   final int avgConsultationMinutes;
 
   const DoctorModel({
@@ -12,17 +11,18 @@ class DoctorModel {
     required this.displayName,
     required this.hospitalId,
     required this.departmentId,
+    this.roomNumber,
     required this.avgConsultationMinutes,
   });
 
-  factory DoctorModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data()!;
+  factory DoctorModel.fromSupabase(Map<String, dynamic> data) {
     return DoctorModel(
-      uid: doc.id,
-      displayName: d['displayName'] ?? 'Unnamed',
-      hospitalId: d['hospitalId'],
-      departmentId: d['departmentId'],
-      avgConsultationMinutes: d['avgConsultationMinutes'] ?? 15,
+      uid: data['id'] as String,
+      displayName: (data['display_name'] as String?) ?? 'Unnamed',
+      hospitalId: data['hospital_id'] as String,
+      departmentId: data['department_id'] as String,
+      roomNumber: data['room_number'] as String?,
+      avgConsultationMinutes: (data['avg_consultation_minutes'] as num?)?.toInt() ?? 15,
     );
   }
 }

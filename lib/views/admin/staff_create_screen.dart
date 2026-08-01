@@ -20,12 +20,15 @@ class _StaffCreateScreenState extends ConsumerState<StaffCreateScreen> {
   final _passwordController = TextEditingController();
   String _selectedRole = 'receptionist';
   String? _selectedDepartmentId;
+  final _roomController = TextEditingController();
+
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _roomController.dispose();
     super.dispose();
   }
 
@@ -42,12 +45,14 @@ class _StaffCreateScreenState extends ConsumerState<StaffCreateScreen> {
       role: _selectedRole,
       displayName: _nameController.text.trim(),
       departmentId: _selectedRole == 'doctor' ? _selectedDepartmentId : null,
+      roomNumber: _selectedRole == 'doctor' ? _roomController.text.trim() : null,
     );
 
     if (success && mounted) {
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
+      _roomController.clear();
       setState(() => _selectedDepartmentId = null);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${_selectedRole == 'doctor' ? 'Doctor' : 'Receptionist'} account created')));
     } else if (!success && mounted) {
@@ -92,6 +97,13 @@ class _StaffCreateScreenState extends ConsumerState<StaffCreateScreen> {
                       onChanged: (v) => setState(() => _selectedDepartmentId = v),
                     );
                   },
+                ),
+              ],
+              if (_selectedRole == 'doctor') ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _roomController,
+                  decoration: const InputDecoration(labelText: 'Room number', prefixIcon: Icon(Icons.meeting_room_outlined)),
                 ),
               ],
               const SizedBox(height: 16),

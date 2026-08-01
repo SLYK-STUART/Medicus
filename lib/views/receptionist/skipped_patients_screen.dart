@@ -58,7 +58,7 @@ class SkippedPatientsScreen extends ConsumerWidget {
                           ),
                           ...skipped.map((e) => ListTile(
                             leading: CircleAvatar(child: Text('#${e.tokenNumber}')),
-                            title: Text('Patient: ${e.patientId}'),
+                            title: Text('Patient: ${e.patientName}'),
                             subtitle: Text('Priority: ${e.priority}'),
                             trailing: FilledButton(
                               onPressed: () async {

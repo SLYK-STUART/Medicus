@@ -1,0 +1,33 @@
+# Supabase local CLI config. Production project region: Frankfurt (eu-central-1).
+# Create the remote project in the dashboard as: Region = Frankfurt (eu-central-1).
+
+project_id = "hospital-queue-app"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[functions.create-staff-account]
+verify_jwt = true
+[functions.create-walk-in-patient]
+verify_jwt = true

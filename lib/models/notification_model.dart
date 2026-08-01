@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class NotificationModel {
   final String id;
   final String type;
@@ -15,14 +13,15 @@ class NotificationModel {
     this.createdAt,
   });
 
-  factory NotificationModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data()!;
+  factory NotificationModel.fromSupabase(Map<String, dynamic> data) {
     return NotificationModel(
-      id: doc.id,
-      type: d['type'] ?? 'info',
-      message: d['message'] ?? '',
-      read: d['read'] ?? false,
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      id: data['id'] as String,
+      type: (data['type'] as String?) ?? 'info',
+      message: (data['message'] as String?) ?? '',
+      read: data['read'] as bool? ?? false,
+      createdAt: data['created_at'] != null
+          ? DateTime.tryParse(data['created_at'] as String)
+          : null,
     );
   }
 }

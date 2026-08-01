@@ -5,12 +5,33 @@ import '../../models/department_model.dart';
 import '../../models/doctor_model.dart';
 import '../../repositories/doctor_repository.dart';
 import '../../viewmodels/auth/auth_viewmodel.dart';
-import '../../viewmodels/patient/booking_viewmodel.dart'; // bookingDepartmentRepoProvider
+import '../../viewmodels/patient/booking_viewmodel.dart';
 
 final _doctorRepoProvider = Provider((ref) => DoctorRepository());
 
 class DoctorListScreen extends ConsumerWidget {
   const DoctorListScreen({super.key});
+
+  Future<void> _editRoomNumber(BuildContext context, WidgetRef ref, DoctorModel doctor) async {
+    final controller = TextEditingController(text: doctor.roomNumber ?? '');
+    final newRoom = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Room Number'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Room number')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (newRoom == null || !context.mounted) return;
+    try {
+      await ref.read(_doctorRepoProvider).updateRoomNumber(doctorId: doctor.uid, roomNumber: newRoom);
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,8 +63,11 @@ class DoctorListScreen extends ConsumerWidget {
                     leading: const CircleAvatar(child: Icon(Icons.medical_services)),
                     title: Text(doc.displayName),
                     subtitle: Text(
-                      '${deptNameById[doc.departmentId] ?? 'Unknown department'} · avg ${doc.avgConsultationMinutes} min/consult',
+                      '${deptNameById[doc.departmentId] ?? 'Unknown department'} · '
+                          '${doc.roomNumber?.isNotEmpty == true ? 'Room ${doc.roomNumber}' : 'No room set'} · '
+                          'avg ${doc.avgConsultationMinutes} min/consult',
                     ),
+                    onTap: () => _editRoomNumber(context, ref, doc),
                     trailing: departments.isEmpty
                         ? null
                         : DropdownButton<String>(

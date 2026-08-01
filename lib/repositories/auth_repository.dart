@@ -1,25 +1,23 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/constants/firestore_paths.dart';
 import '../core/errors/failures.dart';
+import '../core/supabase/supabase_init.dart';
 import '../models/user_model.dart';
 
 class AuthRepository {
-  AuthRepository({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
-      : _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  AuthRepository({SupabaseClient? client}) : _client = client ?? supabase;
 
-  final FirebaseAuth _auth;
-  final FirebaseFirestore _firestore;
+  final SupabaseClient _client;
 
-  Stream<User?> authStateChanges() => _auth.authStateChanges();
+  /// Emits the current auth user (or null) on every session change.
+  Stream<User?> authStateChanges() {
+    return _client.auth.onAuthStateChange.map((event) => event.session?.user);
+  }
 
-  User? get currentFirebaseUser => _auth.currentUser;
+  User? get currentUser => _client.auth.currentUser;
 
-  /// Self-service signup always creates a `patient`. This is the ONLY role
-  /// the app itself can create directly — hospital_admin, receptionist, and
-  /// doctor accounts are created by an admin later in Phase 1, never here.
+  /// Self-service signup always creates a `patient`. Staff accounts are
+  /// created later via service-role Edge Functions, never here.
   Future<UserModel> signUp({
     required String email,
     required String password,
@@ -27,16 +25,28 @@ class AuthRepository {
     String? phoneNumber,
   }) async {
     try {
-      final credential =
-      await _auth.createUserWithEmailAndPassword(email: email, password: password);
-      final uid = credential.user!.uid;
+      final response = await _client.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          if (displayName != null && displayName.isNotEmpty) 'display_name': displayName,
+          if (phoneNumber != null && phoneNumber.isNotEmpty) 'phone_number': phoneNumber,
+        },
+      );
 
-      if (displayName != null && displayName.isNotEmpty) {
-        await credential.user!.updateDisplayName(displayName);
+      final user = response.user;
+      if (user == null) {
+        // Common when email confirmation is required and the session is withheld.
+        throw const AuthFailure(
+          'Sign up succeeded but no session was returned. '
+          'If email confirmation is enabled in Supabase Auth settings, '
+          'confirm the email (or disable confirmations for development) and sign in.',
+          code: 'no-session',
+        );
       }
 
       final userModel = UserModel(
-        uid: uid,
+        uid: user.id,
         email: email,
         displayName: displayName,
         phoneNumber: phoneNumber,
@@ -44,87 +54,84 @@ class AuthRepository {
         hospitalId: null,
       );
 
-      await _firestore.doc(FirestorePaths.user(uid)).set(userModel.toMap());
-
-      // onUserDocWritten fires asynchronously after this write — don't
-      // return until the claim has actually landed on the token, or
-      // anything the caller does immediately after signup (like booking)
-      // will hit a stale token with no role claim yet.
-      await _waitForClaimsSync(expectedRole: 'patient');
+      try {
+        await _client.from('profiles').insert(userModel.toProfileInsert());
+      } catch (e) {
+        // Auth user exists but profile write failed — sign out so the app
+        // doesn't treat this as a logged-in patient with no profile.
+        // Client cannot delete the auth user (needs service role); call out
+        // in Step 2 notes as a known orphan risk to clean via dashboard.
+        await _client.auth.signOut();
+        throw DataFailure(
+          'Account created but profile setup failed: $e. '
+          'Signed out — if the email is already taken on retry, delete the '
+          'orphan user in Supabase Auth dashboard.',
+          code: 'profile-insert-failed',
+        );
+      }
 
       return userModel;
-    } on FirebaseAuthException catch (e) {
-      throw AuthFailure(e.message ?? 'Sign up failed', code: e.code);
-    } on FirebaseException catch (e) {
-      throw DataFailure('Account created but profile setup failed: ${e.message}', code: e.code);
+    } on AuthFailure {
+      rethrow;
+    } on DataFailure {
+      rethrow;
+    } on AuthException catch (e) {
+      throw AuthFailure(e.message, code: e.statusCode);
+    } catch (e) {
+      throw AuthFailure(e.toString(), code: 'sign-up-failed');
     }
   }
-
-  /// Polls with backoff for the custom claim to actually appear on a fresh
-  /// ID token, rather than assuming a single refresh is enough — the
-  /// setCustomClaims trigger's completion time isn't guaranteed to beat a
-  /// naive one-shot refresh, especially on a cold function start.
-  Future<void> _waitForClaimsSync({required String expectedRole, int maxAttempts = 6}) async {
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
-      final tokenResult = await _auth.currentUser?.getIdTokenResult(true);
-      if (tokenResult?.claims?['role'] == expectedRole) return;
-    }
-    // Gave up waiting — not fatal, the trigger will still complete on its
-    // own eventually, but the very next privileged action might still hit
-    // a stale token. ensureFreshToken() below is the second safety net.
-  }
-
-  /// Defensive refresh to call immediately before any action that depends
-  /// on custom claims (booking, check-in, etc.) — cheap insurance against
-  /// the same staleness class of bug showing up in a new place later.
-  Future<void> ensureFreshToken() => refreshIdToken();
 
   Future<UserModel> signIn({required String email, required String password}) async {
     try {
-      final credential =
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
-      final profile = await fetchUserProfile(credential.user!.uid);
+      final response = await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      final uid = response.user?.id;
+      if (uid == null) {
+        throw const AuthFailure('Sign in returned no user.', code: 'no-user');
+      }
+
+      final profile = await fetchUserProfile(uid);
       if (profile == null) {
         throw const AuthFailure(
-          'Signed in but no matching users/{uid} profile doc was found.',
+          'Signed in but no matching profiles row was found.',
           code: 'missing-profile',
         );
       }
       return profile;
-    } on FirebaseAuthException catch (e) {
-      throw AuthFailure(e.message ?? 'Sign in failed', code: e.code);
+    } on AuthFailure {
+      rethrow;
+    } on AuthException catch (e) {
+      throw AuthFailure(e.message, code: e.statusCode);
+    } catch (e) {
+      throw AuthFailure(e.toString(), code: 'sign-in-failed');
     }
   }
 
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() => _client.auth.signOut();
 
   Future<UserModel?> fetchUserProfile(String uid) async {
     try {
-      final doc = await _firestore.doc(FirestorePaths.user(uid)).get();
-      return doc.exists ? UserModel.fromFirestore(doc) : null;
-    } on FirebaseException catch (e) {
-      throw DataFailure(e.message ?? 'Failed to fetch user profile', code: e.code);
+      final data = await _client.from('profiles').select().eq('id', uid).maybeSingle();
+      if (data == null) return null;
+      return UserModel.fromSupabase(data);
+    } on PostgrestException catch (e) {
+      throw DataFailure(e.message, code: e.code);
     }
   }
 
-  /// Live profile stream — use this, not a one-off fetch, anywhere the UI
-  /// needs to react to role/hospitalId changes made by an admin (including
-  /// your manual-edit-in-Firestore-console workflow).
+  /// Live profile stream via Realtime. Requires `profiles` in
+  /// `supabase_realtime` publication (see migration 20260722130000).
   Stream<UserModel?> watchUserProfile(String uid) {
-    return _firestore.doc(FirestorePaths.user(uid)).snapshots().map(
-          (doc) => doc.exists ? UserModel.fromFirestore(doc) : null,
-    );
-  }
-
-  /// Forces a fresh ID token (and therefore fresh custom claims) from the
-  /// server. Since you're editing role/hospitalId by hand in Firestore
-  /// rather than via a synced trigger, the *rules* won't see that change
-  /// until this is called and the user re-authenticates — the Firestore
-  /// doc updating alone does not touch the token's claims. Worth calling
-  /// this from a manual "Refresh my permissions" action in a dev/admin
-  /// screen until the sync trigger (if you build it later) exists.
-  Future<void> refreshIdToken() async {
-    await _auth.currentUser?.getIdToken(true);
+    return _client
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', uid)
+        .map((rows) {
+      if (rows.isEmpty) return null;
+      return UserModel.fromSupabase(rows.first);
+    });
   }
 }

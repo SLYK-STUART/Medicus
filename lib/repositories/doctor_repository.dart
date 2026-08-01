@@ -1,42 +1,72 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/errors/failures.dart';
+import '../core/supabase/supabase_init.dart';
 import '../models/doctor_model.dart';
 
 class DoctorRepository {
-  DoctorRepository({FirebaseFirestore? firestore}) : _firestore = firestore ?? FirebaseFirestore.instance;
-  final FirebaseFirestore _firestore;
+  DoctorRepository({SupabaseClient? client}) : _client = client ?? supabase;
 
-  Stream<List<DoctorModel>> watchDoctors({required String hospitalId, required String departmentId}) {
-    return _firestore
-        .collection('doctors')
-        .where('hospitalId', isEqualTo: hospitalId)
-        .where('departmentId', isEqualTo: departmentId)
-        .snapshots()
-        .map((snap) => snap.docs.map(DoctorModel.fromFirestore).toList());
+  final SupabaseClient _client;
+
+  Stream<List<DoctorModel>> watchDoctors({
+    required String hospitalId,
+    required String departmentId,
+  }) {
+    return _client
+        .from('doctors')
+        .stream(primaryKey: ['id'])
+        .eq('hospital_id', hospitalId)
+        .map(
+          (rows) => rows
+              .where((r) => r['department_id'] == departmentId)
+              .map(DoctorModel.fromSupabase)
+              .toList(),
+        );
   }
 
-  /// All doctors in a hospital, regardless of department — for the
-  /// hospital_admin's reassignment screen.
   Stream<List<DoctorModel>> watchAllDoctorsForHospital(String hospitalId) {
-    return _firestore
-        .collection('doctors')
-        .where('hospitalId', isEqualTo: hospitalId)
-        .snapshots()
-        .map((snap) => snap.docs.map(DoctorModel.fromFirestore).toList());
+    return _client
+        .from('doctors')
+        .stream(primaryKey: ['id'])
+        .eq('hospital_id', hospitalId)
+        .map((rows) => rows.map(DoctorModel.fromSupabase).toList());
+  }
+
+  Stream<List<DoctorModel>> watchAllDoctors() {
+    return _client
+        .from('doctors')
+        .stream(primaryKey: ['id'])
+        .map((rows) => rows.map(DoctorModel.fromSupabase).toList());
   }
 
   Stream<DoctorModel?> watchMyDoctorProfile(String uid) {
-    return _firestore.collection('doctors').doc(uid).snapshots().map(
-          (doc) => doc.exists ? DoctorModel.fromFirestore(doc) : null,
-    );
+    return _client
+        .from('doctors')
+        .stream(primaryKey: ['id'])
+        .eq('id', uid)
+        .map((rows) => rows.isEmpty ? null : DoctorModel.fromSupabase(rows.first));
   }
 
-  Future<void> reassignDepartment({required String doctorId, required String newDepartmentId}) async {
+  Future<void> reassignDepartment({
+    required String doctorId,
+    required String newDepartmentId,
+  }) async {
     try {
-      await _firestore.collection('doctors').doc(doctorId).update({'departmentId': newDepartmentId});
-    } on FirebaseException catch (e) {
-      throw DataFailure(e.message ?? 'Failed to reassign department', code: e.code);
+      await _client.from('doctors').update({'department_id': newDepartmentId}).eq('id', doctorId);
+    } on PostgrestException catch (e) {
+      throw DataFailure(e.message, code: e.code);
+    }
+  }
+
+  Future<void> updateRoomNumber({
+    required String doctorId,
+    required String roomNumber,
+  }) async {
+    try {
+      await _client.from('doctors').update({'room_number': roomNumber}).eq('id', doctorId);
+    } on PostgrestException catch (e) {
+      throw DataFailure(e.message, code: e.code);
     }
   }
 }
